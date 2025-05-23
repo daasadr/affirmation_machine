@@ -57,49 +57,60 @@ class SubliminalGenerator:
             messagebox.showerror("Chyba", "Zadejte prosím alespoň jednu afirmaci.")
             return
         
-        # Create temporary directory
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Generate speech for each affirmation
-            voice_segments = []
-            for i, affirmation in enumerate(affirmations):
-                if affirmation.strip():
-                    tts = gTTS(text=affirmation, lang='cs')
-                    temp_file = os.path.join(temp_dir, f"affirmation_{i}.mp3")
-                    tts.save(temp_file)
-                    voice_segments.append(AudioSegment.from_mp3(temp_file))
-            
-            # Combine all voice segments
-            combined_voice = sum(voice_segments)
-            
-            # Adjust voice volume
-            combined_voice = combined_voice - (20 * (1 - self.voice_volume.get()))
-            
-            # Process background music if selected
-            if self.background_music_path:
-                background = AudioSegment.from_file(self.background_music_path)
+        try:
+            # Create temporary directory
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Generate speech for each affirmation
+                voice_segments = []
+                for i, affirmation in enumerate(affirmations):
+                    if affirmation.strip():
+                        tts = gTTS(text=affirmation, lang='cs')
+                        temp_file = os.path.join(temp_dir, f"affirmation_{i}.mp3")
+                        tts.save(temp_file)
+                        voice_segments.append(AudioSegment.from_mp3(temp_file))
                 
-                # Loop background music to match voice length
-                if len(background) < len(combined_voice):
-                    loops_needed = len(combined_voice) // len(background) + 1
-                    background = background * loops_needed
+                # Combine all voice segments
+                combined_voice = sum(voice_segments)
                 
-                # Trim background to match voice length
-                background = background[:len(combined_voice)]
+                # Adjust voice volume (reduce by 20dB if volume is 0.3)
+                voice_volume_db = -20 * (1 - self.voice_volume.get())
+                combined_voice = combined_voice + voice_volume_db
                 
-                # Mix voice and background
-                final_audio = background.overlay(combined_voice)
-            else:
-                final_audio = combined_voice
-            
-            # Save the final audio
-            output_path = filedialog.asksaveasfilename(
-                defaultextension=".mp3",
-                filetypes=[("MP3 files", "*.mp3")]
-            )
-            
-            if output_path:
-                final_audio.export(output_path, format="mp3")
-                messagebox.showinfo("Úspěch", "Nahrávka byla úspěšně vygenerována!")
+                # Process background music if selected
+                if self.background_music_path:
+                    try:
+                        background = AudioSegment.from_file(self.background_music_path)
+                        
+                        # Reduce background music volume by 10dB to make it less prominent
+                        background = background - 10
+                        
+                        # Loop background music to match voice length
+                        if len(background) < len(combined_voice):
+                            loops_needed = len(combined_voice) // len(background) + 1
+                            background = background * loops_needed
+                        
+                        # Trim background to match voice length
+                        background = background[:len(combined_voice)]
+                        
+                        # Mix voice and background
+                        final_audio = background.overlay(combined_voice)
+                    except Exception as e:
+                        messagebox.showerror("Chyba", f"Chyba při zpracování hudby: {str(e)}")
+                        return
+                else:
+                    final_audio = combined_voice
+                
+                # Save the final audio
+                output_path = filedialog.asksaveasfilename(
+                    defaultextension=".mp3",
+                    filetypes=[("MP3 files", "*.mp3")]
+                )
+                
+                if output_path:
+                    final_audio.export(output_path, format="mp3")
+                    messagebox.showinfo("Úspěch", "Nahrávka byla úspěšně vygenerována!")
+        except Exception as e:
+            messagebox.showerror("Chyba", f"Došlo k chybě při generování nahrávky: {str(e)}")
 
 if __name__ == "__main__":
     root = tk.Tk()
